@@ -1,0 +1,438 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>XMP Preset Processor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Fraunces:ital,opsz,wght@0,9..144,300;0,9..144,500;1,9..144,300&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+  :root {
+    --bg: #0d0d0d;
+    --bg2: #161616;
+    --bg3: #1f1f1f;
+    --border: #2a2a2a;
+    --border-hover: #3d3d3d;
+    --accent: #c8f060;
+    --text: #e8e8e0;
+    --text-muted: #666;
+    --text-dim: #999;
+    --danger: #ff5a5a;
+    --success: #5aff9b;
+    --radius: 8px;
+    --radius-lg: 14px;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'DM Mono', monospace;
+    font-size: 14px;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 60px 20px;
+  }
+  .grain {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='0.04'/%3E%3C/svg%3E");
+    background-size: 256px;
+    opacity: 0.6;
+  }
+  .wrap {
+    position: relative; z-index: 1;
+    width: 100%; max-width: 680px;
+    display: flex; flex-direction: column; gap: 32px;
+  }
+  header { text-align: center; display: flex; flex-direction: column; gap: 10px; }
+  .logo {
+    font-family: 'Fraunces', serif;
+    font-size: 13px; font-weight: 300;
+    letter-spacing: 0.2em; color: var(--accent); text-transform: uppercase;
+  }
+  h1 { font-family: 'Fraunces', serif; font-size: 38px; font-weight: 300; line-height: 1.1; }
+  h1 em { font-style: italic; color: var(--accent); }
+  .sub { font-size: 12px; color: var(--text-muted); letter-spacing: 0.05em; }
+  .sub em { font-style: italic; color: var(--accent); }
+  .step {
+    background: var(--bg2);
+    border: 0.5px solid var(--border);
+    border-radius: var(--radius-lg);
+    padding: 24px;
+    display: flex; flex-direction: column; gap: 16px;
+  }
+  .step-header { display: flex; align-items: center; gap: 12px; }
+  .step-num {
+    width: 26px; height: 26px; border-radius: 50%;
+    border: 0.5px solid var(--accent); color: var(--accent);
+    font-size: 11px; font-weight: 500;
+    display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  }
+  .step-title { font-family: 'Fraunces', serif; font-size: 17px; font-weight: 300; }
+  .step-badge {
+    margin-left: auto; font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--text-muted); background: var(--bg3); border: 0.5px solid var(--border);
+    border-radius: 4px; padding: 3px 8px;
+  }
+  .step-badge.ok { color: var(--success); border-color: #1f4033; background: #0f2420; }
+  .step-badge.proc { color: var(--accent); border-color: #3a4a1a; background: #1e2a0a; }
+  .drop-zone {
+    border: 1px dashed var(--border-hover); border-radius: var(--radius);
+    padding: 36px 20px; display: flex; flex-direction: column;
+    align-items: center; gap: 10px; cursor: pointer;
+    transition: border-color 0.2s, background 0.2s; text-align: center;
+  }
+  .drop-zone:hover, .drop-zone.drag-over {
+    border-color: var(--accent); background: rgba(200,240,96,0.03);
+  }
+  .drop-icon { font-size: 28px; opacity: 0.5; }
+  .drop-label { color: var(--text-dim); font-size: 13px; }
+  .drop-label strong { color: var(--accent); font-weight: 500; }
+  .drop-hint { font-size: 11px; color: var(--text-muted); }
+  input[type="file"] { display: none; }
+  .btn {
+    font-family: 'DM Mono', monospace; font-size: 13px; font-weight: 500;
+    letter-spacing: 0.05em; border-radius: var(--radius); border: 0.5px solid;
+    padding: 10px 20px; cursor: pointer; transition: all 0.15s;
+    display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+  }
+  .btn-primary { background: var(--accent); border-color: var(--accent); color: #0d0d0d; }
+  .btn-primary:hover { background: #d8ff70; }
+  .btn-primary:disabled { opacity: 0.35; cursor: not-allowed; }
+  .btn-ghost { background: transparent; border-color: var(--border-hover); color: var(--text-dim); }
+  .btn-ghost:hover { border-color: var(--text-dim); color: var(--text); }
+  .btn-ghost:disabled { opacity: 0.3; cursor: not-allowed; }
+  .btn-download {
+    background: transparent; border-color: var(--accent); color: var(--accent);
+    width: 100%; justify-content: center; padding: 14px 20px; font-size: 14px;
+  }
+  .btn-download:hover { background: rgba(200,240,96,0.07); }
+  .btn-download:disabled { opacity: 0.3; cursor: not-allowed; }
+  .thumb-grid {
+    display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px;
+  }
+  .thumb-item {
+    position: relative; border-radius: 6px; overflow: hidden;
+    aspect-ratio: 1; background: var(--bg3); border: 0.5px solid var(--border);
+  }
+  .thumb-item img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb-item .thumb-overlay {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; transition: opacity 0.2s;
+  }
+  .thumb-item .thumb-remove {
+    position: absolute; top: 3px; right: 3px;
+    width: 18px; height: 18px; background: rgba(0,0,0,0.7); border-radius: 50%;
+    display: flex; align-items: center; justify-content: center;
+    font-size: 10px; color: #fff; cursor: pointer; opacity: 0; transition: opacity 0.15s;
+  }
+  .thumb-item:hover .thumb-remove { opacity: 1; }
+  .thumb-status-ok .thumb-overlay { background: rgba(90,255,155,0.25); color: var(--success); }
+  .thumb-status-proc .thumb-overlay { background: rgba(200,240,96,0.12); }
+  .thumb-status-err .thumb-overlay { background: rgba(255,90,90,0.25); color: var(--danger); }
+  .progress-bar-wrap { background: var(--bg3); border-radius: 4px; height: 4px; overflow: hidden; }
+  .progress-bar { height: 100%; background: var(--accent); border-radius: 4px; width: 0%; transition: width 0.3s ease; }
+  .log-wrap {
+    background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius);
+    padding: 12px 14px; font-size: 11px; color: var(--text-muted);
+    max-height: 120px; overflow-y: auto; display: flex; flex-direction: column; gap: 3px;
+  }
+  .log-line { display: flex; gap: 8px; }
+  .log-time { color: var(--text-muted); flex-shrink: 0; }
+  .log-line.ok .log-msg { color: var(--success); }
+  .log-line.err .log-msg { color: var(--danger); }
+  .log-line.proc .log-msg { color: var(--accent); }
+  .stats-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+  .stat-card {
+    background: var(--bg3); border: 0.5px solid var(--border); border-radius: var(--radius);
+    padding: 12px 14px; display: flex; flex-direction: column; gap: 4px;
+  }
+  .stat-label { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.1em; }
+  .stat-val { font-family: 'Fraunces', serif; font-size: 24px; font-weight: 300; color: var(--text); }
+  .stat-val.ok { color: var(--success); }
+  .stat-val.err { color: var(--danger); }
+  .section-label { font-size: 10px; text-transform: uppercase; letter-spacing: 0.12em; color: var(--text-muted); }
+  .tag {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: var(--bg3); border: 0.5px solid var(--border);
+    border-radius: 4px; padding: 4px 10px; font-size: 11px; color: var(--text-dim);
+  }
+  .tag .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); }
+  .empty-state { text-align: center; color: var(--text-muted); padding: 12px 0; font-size: 12px; }
+  .spinner {
+    display: inline-block; width: 14px; height: 14px;
+    border: 2px solid transparent; border-top-color: currentColor;
+    border-radius: 50%; animation: spin 0.7s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  footer { text-align: center; font-size: 11px; color: var(--text-muted); padding-top: 8px; }
+</style>
+</head>
+<body>
+<div class="grain"></div>
+<div class="wrap">
+
+  <header>
+    <div class="logo">✦ preset processor</div>
+    <h1>Apply <em>XMP</em><br>at scale.</h1>
+    <p class="sub">Envie as fotos · preset <em>CBP Iluminado</em> aplicado automaticamente · baixe em ZIP</p>
+  </header>
+
+  <!-- STEP 1: IMAGENS -->
+  <div class="step" id="step-images">
+    <div class="step-header">
+      <div class="step-num">1</div>
+      <span class="step-title">Imagens para processar</span>
+      <span class="step-badge" id="images-badge">nenhuma</span>
+    </div>
+    <div class="drop-zone" id="dropZone"
+      ondragover="onDragOver(event)"
+      ondragleave="onDragLeave(event)"
+      ondrop="onDrop(event)"
+      onclick="document.getElementById('imageInput').click()">
+      <div class="drop-icon">🖼</div>
+      <div class="drop-label"><strong>Clique para selecionar</strong> ou arraste aqui</div>
+      <div class="drop-hint">JPG, PNG, TIFF, CR2, ARW, NEF — múltiplos arquivos</div>
+    </div>
+    <input type="file" id="imageInput" multiple accept="image/*,.tiff,.tif,.cr2,.cr3,.arw,.nef,.orf,.rw2,.dng">
+    <div id="thumbGrid" class="thumb-grid" style="display:none;"></div>
+    <div id="addMoreRow" style="display:none; justify-content:space-between; align-items:center;">
+      <span class="section-label" id="imgCountLabel">0 imagens</span>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-ghost" onclick="document.getElementById('imageInput').click()">+ adicionar mais</button>
+        <button class="btn btn-ghost" onclick="clearImages()">limpar tudo</button>
+      </div>
+    </div>
+    <div class="tag">
+      <span class="dot"></span>
+      <span>Preset <strong style="color:var(--accent);font-weight:500;">CBP Iluminado</strong> já configurado no servidor</span>
+    </div>
+  </div>
+
+  <!-- STEP 2: PROCESSAR -->
+  <div class="step" id="step-process">
+    <div class="step-header">
+      <div class="step-num">2</div>
+      <span class="step-title">Enviar &amp; processar</span>
+      <span class="step-badge" id="process-badge">pronto</span>
+    </div>
+    <div class="stats-row">
+      <div class="stat-card">
+        <span class="stat-label">Total</span>
+        <span class="stat-val" id="stat-total">0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Concluídos</span>
+        <span class="stat-val ok" id="stat-ok">0</span>
+      </div>
+      <div class="stat-card">
+        <span class="stat-label">Erros</span>
+        <span class="stat-val err" id="stat-err">0</span>
+      </div>
+    </div>
+    <div class="progress-bar-wrap" id="progressWrap" style="display:none;">
+      <div class="progress-bar" id="progressBar"></div>
+    </div>
+    <div class="log-wrap" id="logWrap">
+      <div class="empty-state">O log de processamento aparece aqui.</div>
+    </div>
+    <div style="display:flex; gap:10px; flex-wrap:wrap;">
+      <button class="btn btn-primary" id="processBtn" onclick="startProcessing()" disabled>
+        <span>▶</span> Iniciar processamento
+      </button>
+      <button class="btn btn-ghost" id="cancelBtn" onclick="cancelProcessing()" disabled style="display:none;">
+        cancelar
+      </button>
+    </div>
+  </div>
+
+  <!-- STEP 3: DOWNLOAD -->
+  <div class="step" id="step-download" style="opacity:0.35; pointer-events:none;">
+    <div class="step-header">
+      <div class="step-num">3</div>
+      <span class="step-title">Baixar resultados</span>
+      <span class="step-badge" id="download-badge">aguardando</span>
+    </div>
+    <p style="font-size:12px; color: var(--text-muted); line-height:1.7;">
+      Todas as imagens processadas serão empacotadas em um único arquivo ZIP,
+      preservando os nomes originais.
+    </p>
+    <button class="btn btn-download" id="downloadBtn" onclick="downloadZip()" disabled>
+      ↓ &nbsp; baixar ZIP com todas as imagens
+    </button>
+  </div>
+
+  <footer>
+    Back-end em <code>http://localhost:5000</code> — rode <code>python app_server.py</code> antes de usar.
+  </footer>
+
+</div>
+
+<script>
+const BACKEND_URL = 'http://localhost:5000/process';
+
+let imageFiles = [];
+let processedBlobs = [];
+let cancelRequested = false;
+let isProcessing = false;
+
+const $ = id => document.getElementById(id);
+
+// ─── IMAGENS ──────────────────────────────────────────────────────────────────
+function onDragOver(e) { e.preventDefault(); $('dropZone').classList.add('drag-over'); }
+function onDragLeave(e) { $('dropZone').classList.remove('drag-over'); }
+function onDrop(e) {
+  e.preventDefault();
+  $('dropZone').classList.remove('drag-over');
+  addImages(Array.from(e.dataTransfer.files).filter(isAcceptedFile));
+}
+
+$('imageInput').addEventListener('change', e => { addImages(Array.from(e.target.files)); e.target.value = ''; });
+
+function isAcceptedFile(f) {
+  return /\.(jpe?g|png|tiff?|cr[23]|arw|nef|orf|rw2|dng|webp)$/i.test(f.name);
+}
+
+function addImages(files) {
+  if (!files.length) return;
+  imageFiles = [...imageFiles, ...files];
+  renderThumbs();
+  updateProcessBtn();
+}
+
+function clearImages() {
+  imageFiles = []; processedBlobs = [];
+  renderThumbs(); updateProcessBtn(); resetStep3();
+}
+
+function removeImage(idx) {
+  imageFiles.splice(idx, 1); renderThumbs(); updateProcessBtn();
+}
+
+function renderThumbs() {
+  const grid = $('thumbGrid'), row = $('addMoreRow'), count = imageFiles.length;
+  $('images-badge').textContent = count ? `${count} arquivo${count > 1 ? 's' : ''}` : 'nenhuma';
+  $('stat-total').textContent = count;
+  if (!count) {
+    grid.style.display = 'none'; row.style.display = 'none'; $('dropZone').style.display = ''; return;
+  }
+  $('dropZone').style.display = 'none'; grid.style.display = 'grid'; row.style.display = 'flex';
+  $('imgCountLabel').textContent = `${count} imagem${count > 1 ? 'ns' : ''}`;
+  grid.innerHTML = '';
+  imageFiles.forEach((f, i) => {
+    const el = document.createElement('div');
+    el.className = 'thumb-item'; el.id = `thumb-${i}`;
+    const url = URL.createObjectURL(f);
+    el.innerHTML = `<img src="${url}" onload="URL.revokeObjectURL(this.src)"><div class="thumb-overlay"></div><div class="thumb-remove" onclick="removeImage(${i})" title="remover">✕</div>`;
+    grid.appendChild(el);
+  });
+}
+
+// ─── PROCESSO ─────────────────────────────────────────────────────────────────
+function updateProcessBtn() {
+  $('processBtn').disabled = imageFiles.length === 0 || isProcessing;
+}
+
+function log(msg, type = 'info') {
+  const wrap = $('logWrap');
+  if (wrap.querySelector('.empty-state')) wrap.innerHTML = '';
+  const t = new Date().toTimeString().slice(0, 8);
+  const line = document.createElement('div');
+  line.className = `log-line ${type}`;
+  line.innerHTML = `<span class="log-time">${t}</span><span class="log-msg">${msg}</span>`;
+  wrap.appendChild(line); wrap.scrollTop = wrap.scrollHeight;
+}
+
+function setThumbStatus(idx, status) {
+  const el = $(`thumb-${idx}`); if (!el) return;
+  el.className = `thumb-item thumb-status-${status}`;
+  el.querySelector('.thumb-overlay').innerHTML =
+    status === 'ok' ? '✓' : status === 'err' ? '✕' : '<span class="spinner"></span>';
+}
+
+async function startProcessing() {
+  if (!imageFiles.length) return;
+  cancelRequested = false; isProcessing = true; processedBlobs = [];
+  $('processBtn').disabled = true;
+  $('cancelBtn').style.display = 'inline-flex'; $('cancelBtn').disabled = false;
+  $('progressWrap').style.display = 'block';
+  $('process-badge').className = 'step-badge proc';
+  $('process-badge').innerHTML = '<span class="spinner"></span>';
+  let ok = 0, err = 0;
+  $('stat-ok').textContent = 0; $('stat-err').textContent = 0;
+  log(`Iniciando processamento de ${imageFiles.length} imagem(ns)...`, 'proc');
+
+  for (let i = 0; i < imageFiles.length; i++) {
+    if (cancelRequested) { log('Cancelado pelo usuário.', 'err'); break; }
+    const f = imageFiles[i];
+    setThumbStatus(i, 'proc');
+    log(`Processando ${f.name}...`);
+    try {
+      const formData = new FormData();
+      formData.append('image', f);
+      const res = await fetch(BACKEND_URL, { method: 'POST', body: formData });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      processedBlobs.push({ name: f.name, blob });
+      setThumbStatus(i, 'ok'); log(`✓ ${f.name}`, 'ok'); ok++;
+    } catch (e) {
+      setThumbStatus(i, 'err'); log(`✕ ${f.name}: ${e.message}`, 'err'); err++;
+    }
+    $('stat-ok').textContent = ok; $('stat-err').textContent = err;
+    $('progressBar').style.width = `${((i + 1) / imageFiles.length) * 100}%`;
+  }
+
+  isProcessing = false; $('cancelBtn').style.display = 'none';
+  if (ok > 0) {
+    $('process-badge').className = 'step-badge ok';
+    $('process-badge').textContent = `✓ ${ok} concluído${ok > 1 ? 's' : ''}`;
+    log(`Concluído! ${ok} processado${ok > 1 ? 's' : ''}, ${err} erro${err !== 1 ? 's' : ''}.`, 'ok');
+    enableDownload(ok);
+  } else {
+    $('process-badge').className = 'step-badge';
+    $('process-badge').textContent = 'erro';
+    $('progressBar').style.background = 'var(--danger)';
+    log('Nenhuma imagem processada com sucesso.', 'err');
+  }
+  updateProcessBtn();
+}
+
+function cancelProcessing() { cancelRequested = true; $('cancelBtn').disabled = true; }
+
+// ─── DOWNLOAD ─────────────────────────────────────────────────────────────────
+function resetStep3() {
+  const s = $('step-download');
+  s.style.opacity = '0.35'; s.style.pointerEvents = 'none';
+  $('download-badge').className = 'step-badge'; $('download-badge').textContent = 'aguardando';
+  $('downloadBtn').disabled = true;
+  $('progressBar').style.width = '0%'; $('progressBar').style.background = 'var(--accent)';
+}
+
+function enableDownload(count) {
+  const s = $('step-download');
+  s.style.opacity = '1'; s.style.pointerEvents = '';
+  $('download-badge').className = 'step-badge ok';
+  $('download-badge').textContent = `${count} pronto${count > 1 ? 's' : ''}`;
+  $('downloadBtn').disabled = false;
+}
+
+async function downloadZip() {
+  if (!processedBlobs.length) return;
+  const btn = $('downloadBtn');
+  btn.disabled = true; btn.innerHTML = '<span class="spinner"></span> &nbsp; compactando...';
+  const zip = new JSZip();
+  const folder = zip.folder('resultado');
+  processedBlobs.forEach(({ name, blob }) => folder.file(name, blob));
+  const content = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+  const url = URL.createObjectURL(content);
+  const a = document.createElement('a');
+  a.href = url; a.download = `resultado_${new Date().toISOString().slice(0, 10)}.zip`;
+  a.click(); URL.revokeObjectURL(url);
+  btn.disabled = false; btn.innerHTML = '↓ &nbsp; baixar ZIP com todas as imagens';
+}
+</script>
+</body>
+</html>
