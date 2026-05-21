@@ -186,7 +186,7 @@ def process():
 
 @app.route("/")
 def index():
-    html_path = Path(__file__).parent / "xmp-processor.html"
+    html_path = Path(__file__).parent / "index.html"
     if html_path.exists():
         return html_path.read_text(encoding="utf-8")
     return "<p>Coloque o xmp-processor.html na mesma pasta.</p>"
