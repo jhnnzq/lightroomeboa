@@ -189,9 +189,9 @@ def index():
     html_path = Path(__file__).parent / "index.html"
     if html_path.exists():
         return html_path.read_text(encoding="utf-8")
-    return "<p>Coloque o xmp-processor.html na mesma pasta.</p>"
+    return "<p>Coloque o index.html na mesma pasta.</p>"
 
 if __name__ == "__main__":
     import os
     port = int(os.environ.get("PORT", 5000))
-    app.run(host="0.0.0.0", port=port, debug=False)
+    app.run(host="0.0.0.0", port=port)
